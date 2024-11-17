@@ -10,7 +10,6 @@ A high-performance, thread-safe memory allocator implemented in C, using the sla
 - [Usage](#usage)
 - [Thread Safety](#thread-safety)
 - [Functions](#functions)
-- [Testing](#testing)
 
 ## Features
 
@@ -21,21 +20,44 @@ A high-performance, thread-safe memory allocator implemented in C, using the sla
 - 🧪 **Comprehensive test suite**: Ensures the allocator behaves correctly under various conditions.
   
 ## How It Works
-```mermaid 
-    subgraph Slab Memory Layout
-    B
-    C
-    D
-    E
-    F
-end
+```
++------------------------+
+|     Hash Table         |
++------------------------+
+| Index 0                |  ---> Slab for object size 1
+| Index 1                |  ---> Slab for object size 2
+| Index 2                |  ---> Slab for object size 3
+| ...                    |
+| Index N                |  ---> Slab for object size N
++------------------------+
+```
+```
+Slab (size: 64 bytes)
++--------------------------------------------+
+| Slab Header (object_size, num_objects, etc) |
++--------------------------------------------+
+| Free Block 1 ----------------------------> | ---> Block of 64 bytes
++--------------------------------------------+
+| Free Block 2 ----------------------------> | ---> Block of 64 bytes
++--------------------------------------------+
+| Free Block 3 ----------------------------> | ---> Block of 64 bytes
++--------------------------------------------+
+| ...                                        |
++--------------------------------------------+
+| NULL (end of free list)                    |
++--------------------------------------------+
+```
 
-style A fill:#f9f,stroke:#333,stroke-width:2px
-style B fill:#bbf,stroke:#333,stroke-width:1px
-style C fill:#bbf,stroke:#333,stroke-width:1px
-style D fill:#bbf,stroke:#333,stroke-width:1px
-style F fill:#bbf,stroke:#333,stroke-width:1px
+```
++---------------------------------------------+
+|                Hash Table                  |
++---------------------------------------------+
+| Index 0  ---> Slab 1 (Object size 64 bytes) |  ---> Slab with blocks of 64 bytes
+| Index 1  ---> Slab 2 (Object size 128 bytes)|  ---> Slab with blocks of 128 bytes
+| Index 2  ---> Slab 3 (Object size 256 bytes)|  ---> Slab with blocks of 256 bytes
++---------------------------------------------+
 
+Each slab has its own free list where memory blocks are managed
 ```
 
 ### Slab Memory Layout
@@ -52,6 +74,44 @@ The memory allocator organizes memory into slabs, which are essentially contiguo
 1. **Create Slab**: If no slab exists for the requested object size, a new slab is created.
 2. **Allocate Memory**: Memory is allocated from a slab's free list. If the slab runs out of memory, a new slab is created.
 3. **Deallocate Memory**: Memory is deallocated by adding the freed block back into the slab's free list.
+
+
+## Before Allocation(Empty free list):
+
+```
+Hash Table:
++---------------------------------------------+
+| Index 0  ---> Slab 1 (Object size 64 bytes) |  ---> Slab with blocks of 64 bytes (Free list: Block A -> Block B -> NULL)
+| Index 1  ---> Slab 2 (Object size 128 bytes)|  ---> Slab with blocks of 128 bytes
+| Index 2  ---> Slab 3 (Object size 256 bytes)|  ---> Slab with blocks of 256 bytes
++---------------------------------------------+
+
+Slab 1 (64 bytes):
++--------------------------------------------+
+| Block A (64 bytes) --------------------->  |
++--------------------------------------------+
+| Block B (64 bytes) --------------------->  |
++--------------------------------------------+
+| NULL (end of free list)                    |
++--------------------------------------------+
+```
+## After Allocation(Block A allocated):
+
+```
+Hash Table:
++---------------------------------------------+
+| Index 0  ---> Slab 1 (Object size 64 bytes) |  ---> Slab with blocks of 64 bytes (Free list: Block B -> NULL)
+| Index 1  ---> Slab 2 (Object size 128 bytes)|  ---> Slab with blocks of 128 bytes
+| Index 2  ---> Slab 3 (Object size 256 bytes)|  ---> Slab with blocks of 256 bytes
++---------------------------------------------+
+
+Slab 1 (64 bytes):
++--------------------------------------------+
+| Block B (64 bytes) --------------------->  |
++--------------------------------------------+
+| NULL (end of free list)                    |
++--------------------------------------------+
+```
 
 ### Thread Safety
 
