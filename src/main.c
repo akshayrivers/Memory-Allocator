@@ -8,9 +8,6 @@
 List_Slabs track[HASH_TABLE_SIZE] = {0};
 pthread_mutex_t mutex= PTHREAD_MUTEX_INITIALIZER;// for thread safety 
 
-
-
-
 // Now we need to define functions which can intitialise and do the required jobs
 Slab* create_slab(size_t obejct_size,size_t num_objects){
     Slab* slab =(Slab*)malloc(sizeof(Slab));
@@ -148,16 +145,21 @@ void deallocate(size_t object_size, void* block) {
 // Free all slabs in the track array
 void free_all() {
     pthread_mutex_lock(&mutex);
+    printf("Starting free_all...\n");
 
-    // Iterate over the track array and destroy any slabs that are present
     for (int i = 0; i < HASH_TABLE_SIZE; i++) {
         Slab* slab = track[i].slab;
         if (slab != NULL) {
-            destroy_slab(slab);  // Cleanup slab and free memory
-            track[i].slab = NULL;  // Ensure the track entry is cleared
-            track[i].obejct_size = 0;  // Reset the object size to indicate no slab is present
+            printf("Destroying slab at index %d, object size: %zu\n", i, track[i].obejct_size);
+            free(slab); // Call to clean up the slab
+            track[i].slab = NULL;  // Ensure slab is removed from track
+            track[i].obejct_size = 0;  // Reset the object_size
+        } else {
+            printf("No slab to destroy at index %d\n", i);
         }
     }
 
     pthread_mutex_unlock(&mutex);
+    printf("free_all completed.\n");
 }
+
