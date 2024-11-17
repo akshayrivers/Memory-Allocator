@@ -143,6 +143,7 @@ void test_destroy_slab() {
     printf("destroy_slab test passed.\n");
 }
 
+
 void test_get_slab_for_size_create_new() {
     size_t object_size = 64;
 
@@ -198,8 +199,6 @@ void test_get_slab_for_size_collision() {
     // Check that slabs for different object sizes are stored at different indices
     if (index_1 == index_2) {
         printf("Collision detected: object_size_1 = %zu, object_size_2 = %zu\n", object_size_1, object_size_2);
-        // You could adjust the HASH_TABLE_SIZE or make the hash function more complex
-        // to reduce the chance of such collisions.
     }
 
     // Check that the slabs are different

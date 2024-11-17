@@ -5,7 +5,7 @@
 #include <assert.h>
 #include <pthread/pthread.h>
 
-List_Slabs track[HASH_TABLE_SIZE] = {0};
+List_Slabs track[HASH_TABLE_SIZE] = {0};// An array in a way which stores the slabs of different object_sizes
 pthread_mutex_t mutex= PTHREAD_MUTEX_INITIALIZER;// for thread safety 
 
 // Now we need to define functions which can intitialise and do the required jobs
