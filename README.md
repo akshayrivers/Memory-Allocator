@@ -21,21 +21,23 @@ A high-performance, thread-safe memory allocator implemented in C, using the sla
 - 🧪 **Comprehensive test suite**: Ensures the allocator behaves correctly under various conditions.
   
 ## How It Works
-graph LR
-    HT[Hash Table] --> S1[Slab List 1]
-    HT --> S2[Slab List 2]
-    HT --> S3[...]
-    HT --> SN[Slab List N]
-    
-    S1 --> B1[Block Size X]
-    S2 --> B2[Block Size Y]
-    S3 --> B3[Block Size Z]
-    
-    style HT fill:#f96,stroke:#333,stroke-width:2px
-    style S1 fill:#9cf,stroke:#333,stroke-width:1px
-    style S2 fill:#9cf,stroke:#333,stroke-width:1px
-    style S3 fill:#9cf,stroke:#333,stroke-width:1px
-    style SN fill:#9cf,stroke:#333,stroke-width:1px
+```mermaid 
+    subgraph Slab Memory Layout
+    B
+    C
+    D
+    E
+    F
+end
+
+style A fill:#f9f,stroke:#333,stroke-width:2px
+style B fill:#bbf,stroke:#333,stroke-width:1px
+style C fill:#bbf,stroke:#333,stroke-width:1px
+style D fill:#bbf,stroke:#333,stroke-width:1px
+style F fill:#bbf,stroke:#333,stroke-width:1px
+
+```
+
 ### Slab Memory Layout
 
 The memory allocator organizes memory into slabs, which are essentially contiguous blocks of memory containing fixed-size objects. Each slab has a free list that manages the available blocks. When memory is allocated, blocks are taken from the free list, and when memory is deallocated, blocks are added back to the list.
