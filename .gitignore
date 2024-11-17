@@ -1,0 +1,13 @@
+# Ignore binaries in the src folder
+/src/*.o
+/src/*.out
+/src/*.exe
+/src/*.dylib
+/src/main
+# macOS-specific files in the src folder
+/src/.DS_Store
+.vscode
+.DS_Store
+build/
+obj/
+src/tests

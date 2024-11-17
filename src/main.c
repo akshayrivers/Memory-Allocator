@@ -1,22 +1,15 @@
 #include <stdio.h>
+#include "main.h"
 #include <stdlib.h>
 #include <stddef.h>
+#include <assert.h>
+#include <pthread/pthread.h>
 
-#define Pool_Size 1024*1024//which is 1 mb
-
-// we are using this as a linked list to acces our own free list 
-typedef struct FreeBlock{
-    struct FreeBlock* next;
-} FreeBlock;
+List_Slabs track[HASH_TABLE_SIZE] = {0};
+pthread_mutex_t mutex= PTHREAD_MUTEX_INITIALIZER;// for thread safety 
 
 
-typedef struct Slab{
-    size_t obejct_size; //size of each object in this slab 
-    size_t num_objects; // number of object in this slab
-    void* start; 
-    FreeBlock* free_list;// free list of pointers for slots 
-    struct Slab* next; // pointer to the next slab 
-} Slab;
+
 
 // Now we need to define functions which can intitialise and do the required jobs
 Slab* create_slab(size_t obejct_size,size_t num_objects){
@@ -28,9 +21,8 @@ Slab* create_slab(size_t obejct_size,size_t num_objects){
     slab->obejct_size = obejct_size;// we defined a pointer here because we are are accessing the Slab* ptr so use should also acces its members with pointers and not  with . 
     slab->num_objects = num_objects;// filling up the struct 
 
-    slab->start = malloc(obejct_size*num_objects);// allocated the memory for the full linked list of slab 
-      if (!slab->start) {
-        perror("Failed to allocate memory for slab objects");
+  if (posix_memalign(&slab->start, sizeof(void*), obejct_size * num_objects) != 0) {
+        perror("Failed to allocate aligned memory for slab objects");
         free(slab);
         exit(EXIT_FAILURE);
     }
@@ -49,20 +41,44 @@ Slab* create_slab(size_t obejct_size,size_t num_objects){
 }   
 
 // allocating memory from inside the slab 
-void* allocate_from_slab(Slab* slab){
+void* allocate_from_slab(Slab* slab) {
+    pthread_mutex_lock(&mutex);
+    assert(slab != NULL);
 
-    if(!slab->free_list){
-        return NULL;//Slab is full 
+    // Try to allocate from the current slab
+    while (slab != NULL) {
+        if (slab->free_list != NULL) {
+            // Memory is available, allocate it
+            void* block = slab->free_list;
+            slab->free_list = slab->free_list->next;
+            pthread_mutex_unlock(&mutex);
+            return block;
+        }
+
+        // Move to the next slab if the current one is full
+        slab = slab->next;
     }
-    // we used the space and moved on to the next block now 
-    void* block = slab->free_list;
-    slab->free_list = slab->free_list->next;
 
+    // If no slabs have available memory, create a new slab
+    Slab* new_slab = create_slab(slab->obejct_size, slab->num_objects);
+
+    // Link the new slab to the previous ones
+    slab->next = new_slab;
+
+    // Allocate memory from the newly created slab
+    void* block = new_slab->free_list;
+    new_slab->free_list = new_slab->free_list->next;
+    
+    pthread_mutex_unlock(&mutex);
     return block;
 }
 
+
+
 // deallocating memory back to the slab
 void deallocate_to_slab(Slab* slab, void* block) {
+    pthread_mutex_lock(&mutex);
+    assert(block != NULL); 
     //Before : free_list -> [Block A] -> [Block B] -> NULL
 
     FreeBlock* new_block = (FreeBlock*)block;
@@ -72,23 +88,76 @@ void deallocate_to_slab(Slab* slab, void* block) {
     slab->free_list = new_block;
 
     //finally: free_list -> [Block X] -> [Block A] -> [Block B] -> NULL
+    pthread_mutex_unlock(&mutex);
+
 }
 
-// Cleanup the whole slab ultimately free all the memory it used 
+// Cleanup the whole slab and remove it from track
 void destroy_slab(Slab* slab) {
+    pthread_mutex_lock(&mutex);
+    if (slab == NULL) {
+        pthread_mutex_unlock(&mutex);
+        return;
+    }
+
+    int index = slab->obejct_size % HASH_TABLE_SIZE;
+
+    // Debugging: print the current slab and the tracked slab
+    printf("Destroying slab with size %zu at index %d\n", slab->obejct_size, index);
+    printf("Current tracked slab: %p\n", track[index].slab);
+
+    if (track[index].slab == slab) {
+        // Set the track entry to NULL
+        track[index].slab = NULL;
+        track[index].obejct_size = 0;
+        printf("Slab removed from track at index %d\n", index);
+    }
+
     free(slab->start);
     free(slab);
-}
-int main(){
-    Slab* slab= create_slab(64,128);
 
-    void* obj1= allocate_from_slab(slab);
-    void* obj2 = allocate_from_slab(slab);
-    printf("Allocated memory : %p , %p\n",obj1,obj2);
-    deallocate_to_slab(slab, obj1);
-    deallocate_to_slab(slab, obj2);
-    printf("Allocated memory : %p , %p\n",obj1,obj2);
-    destroy_slab(slab);
-    printf("Allocated memory : %p , %p\n",obj1,obj2);
-    return 0;
+    pthread_mutex_unlock(&mutex);
+}
+
+
+
+
+Slab* get_slab_for_size(size_t obejct_size) {
+    int index = obejct_size % HASH_TABLE_SIZE;
+    if (track[index].obejct_size == obejct_size && track[index].slab != NULL) {
+        return track[index].slab;
+    }
+
+    // If no matching slab, create a new one
+    Slab* new_slab = create_slab(obejct_size, 128);
+    track[index].obejct_size = obejct_size;
+    track[index].slab = new_slab;
+
+    return new_slab;
+}
+void* allocate(size_t object_size) {
+    Slab* slab = get_slab_for_size(object_size);
+    return allocate_from_slab(slab);
+}
+
+void deallocate(size_t object_size, void* block) {
+    Slab* slab = get_slab_for_size(object_size);
+    deallocate_to_slab(slab, block);
+}
+
+// Free all slabs in the track array
+void free_all() {
+    pthread_mutex_lock(&mutex);
+
+    // Iterate over the track array and destroy any slabs that are present
+    for (int i = 0; i < HASH_TABLE_SIZE; i++) {
+        Slab* slab = track[i].slab;
+        if (slab != NULL) {
+            destroy_slab(slab);  // Cleanup slab and free memory
+            track[i].slab = NULL;  // Ensure the track entry is cleared
+            track[i].obejct_size = 0;  // Reset the object size to indicate no slab is present
+        }
+    }
+
+    pthread_mutex_unlock(&mutex);
 }
